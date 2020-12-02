@@ -1,6 +1,7 @@
 import re
 from shutil import copy2
 from sklearn.model_selection import train_test_split
+import sklearn as sk
 
 import tensorflow as tf
 import os
@@ -11,6 +12,9 @@ import numpy as np
 import os
 import io
 import time
+
+
+'''preprocessing data'''
 
 new_location = os.getcwd()
 
@@ -111,6 +115,8 @@ print ("Target Language; index to word mapping")
 convert(targ_lang, target_tensor_train[0])
 '''
 
+
+
 BUFFER_SIZE = len(input_tensor_train)
 BATCH_SIZE = 64
 steps_per_epoch = len(input_tensor_train) // BATCH_SIZE
@@ -122,6 +128,8 @@ vocab_tar_size = len(targ_lang.word_index) + 1
 dataset = tf.data.Dataset.from_tensor_slices((input_tensor_train, target_tensor_train)).shuffle(BUFFER_SIZE)
 dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
 
+
+'''creating custom models'''
 
 class Encoder(tf.keras.Model):
     def __init__(self, vocab_size, embedding_size, lstm_size,batch_sz):
@@ -199,6 +207,7 @@ a = tf.train.latest_checkpoint(
 checkpoint.restore(a).assert_consumed()
 '''
 
+'''training part'''
 @tf.function
 def train_step(source_seq, targ, en_initial_states):
     loss = 0

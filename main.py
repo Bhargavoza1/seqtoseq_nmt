@@ -1,3 +1,8 @@
+'''
+inp_lang = fra
+targ_lang = eng
+'''
+
 import re
 from shutil import copy2
 from sklearn.model_selection import train_test_split
@@ -12,6 +17,7 @@ import os
 import io
 import time
 
+'''preprocessing data'''
 new_location = os.getcwd()
 
 path_to_zip = tf.keras.utils.get_file(
@@ -44,14 +50,17 @@ def preproc_sentence(_s):
     return _s
 
 
-''' 
+'''
 eng_sentence = u" May I borrow this book? "
 fra_sentence = u"Puis-je emprunter ce livre?"
 eng = preproc_sentence(eng_sentence)
 fra = preproc_sentence(fra_sentence)
+
+#  May I borrow this book?   ->   <start> may i borrow this book ? <end> 
+#  Puis-je emprunter ce livre?  ->  <start> puis - je emprunter ce livre ? <end>  
 '''
 
-
+''' filter and splitting data'''
 def create_dataset(_path_to_file, num_examples):
     lines = open(_path_to_file, encoding='UTF-8').read().strip().split('\n')
     word_pairs = [[preproc_sentence(w) for w in l.split('\t')] for l in lines[:num_examples]]
@@ -64,13 +73,14 @@ print(eng[2])
 print(fra[2])
 '''
 
-
+'''convert word to vector'''
 def tokenize(lang):
     lang_tokenizer = tf.keras.preprocessing.text.Tokenizer(filters='')
     lang_tokenizer.fit_on_texts(lang)
     tensor = lang_tokenizer.texts_to_sequences(lang)
     tensor = tf.keras.preprocessing.sequence.pad_sequences(tensor,
-                                                           padding='post')
+                                                           padding='post')  # padding = post (1,2,3,4,5,0,0,0,0,0)
+
 
     return tensor, lang_tokenizer
 
@@ -110,6 +120,21 @@ print ()
 print ("Target Language; index to word mapping")
 convert(targ_lang, target_tensor_train[0])
 '''
+'''
+Input Language; index to word mapping
+1 ----> <start>
+58 ----> elles
+45 ----> sont
+2078 ----> parties
+3 ----> .
+2 ----> <end>
+Target Language; index to word mapping
+1 ----> <start>
+28 ----> they
+168 ----> left 
+'''
+
+
 
 BUFFER_SIZE = len(input_tensor_train)
 BATCH_SIZE = 64
@@ -130,9 +155,11 @@ example_input_batch.shape, example_target_batch.shape
 
 class Encoder(tf.keras.Model):
     def __init__(self, vocab_size, embedding_dim, enc_units, batch_sz):
+        # embedding_dim = 256
+        # vocab_size = 8562
         super(Encoder, self).__init__()
-        self.batch_sz = batch_sz
-        self.enc_units = enc_units
+        self.batch_sz = batch_sz #64
+        self.enc_units = enc_units #1024
         self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
         self.gru = tf.keras.layers.GRU(self.enc_units,
                                        return_state=True,
@@ -140,12 +167,12 @@ class Encoder(tf.keras.Model):
                                        recurrent_initializer='glorot_uniform')
 
     def __call__(self, x, hidden):
-        x = self.embedding(x)
-        output, state_h  = self.gru(x, initial_state=hidden)
-        return output, state_h
+        x = self.embedding(x) # 64, 20, 256 (batch , max length of sentence ,embedding_dim  )
+        output, state_h  = self.gru(x, initial_state=hidden) #  output = 64, 20, 1024 # state_h(last state) = 64, 1024
+        return output , state_h
 
     def init_hidden_state(self):
-        return tf.zeros((self.batch_sz, self.enc_units))
+        return tf.zeros((self.batch_sz, self.enc_units)) # 64x1024
 
 
         #return (tf.zeros([self.batch_sz, self.lstm_size]),
@@ -325,3 +352,7 @@ def translate(sentence):
     print('Predicted translation: {}'.format(result))
 
 translate(u'Un chien a quatre pattes.')
+'''output: a dog has four legs . <end>  '''
+
+
+
