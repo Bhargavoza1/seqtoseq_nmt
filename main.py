@@ -81,7 +81,6 @@ def tokenize(lang):
     tensor = tf.keras.preprocessing.sequence.pad_sequences(tensor,
                                                            padding='post')  # padding = post (1,2,3,4,5,0,0,0,0,0)
 
-
     return tensor, lang_tokenizer
 
 
@@ -168,8 +167,8 @@ class Encoder(tf.keras.Model):
 
     def __call__(self, x, hidden):
         x = self.embedding(x) # 64, 20, 256 (batch , max length of sentence ,embedding_dim  )
-        output, state_h  = self.gru(x, initial_state=hidden) #  output = 64, 20, 1024 # state_h(last state) = 64, 1024
-        return output , state_h
+        _, state_h  = self.gru(x, initial_state=hidden) #  output = 64, 20, 1024 # state_h(last state) = 64, 1024
+        return _ , state_h
 
     def init_hidden_state(self):
         return tf.zeros((self.batch_sz, self.enc_units)) # 64x1024
@@ -178,24 +177,25 @@ class Encoder(tf.keras.Model):
         #return (tf.zeros([self.batch_sz, self.lstm_size]),
          #   tf.zeros([self.batch_sz, self.lstm_size]))
 
+'''init encoder '''
+encoder = Encoder(vocab_inp_size, embedding_dim, units, BATCH_SIZE)#vocab_inp_size=8562, embedding_dim=256, units=1024, BATCH_SIZE=64
 
-encoder = Encoder(vocab_inp_size, embedding_dim, units, BATCH_SIZE)
-
-# sample input
+'''
 example_input_batch, example_target_batch = next(iter(dataset))
 example_input_batch.shape, example_target_batch.shape
-# sample input
 sample_hidden = encoder.init_hidden_state()
 sample_output, sample_hidden  = encoder(example_input_batch, sample_hidden)
 print ('Encoder output shape: (batch size, sequence length, units) {}'.format(sample_output.shape))
 print ('Encoder Hidden state shape: (batch size, units) {}'.format(sample_hidden.shape))
-
+'''
 
 class Decoder(tf.keras.Model):
     def __init__(self, vocab_size, embedding_dim, dec_units, batch_sz):
+        # vocab_size=4483
+        #embedding_dim = 256
         super(Decoder, self).__init__()
-        self.batch_sz = batch_sz
-        self.dec_units = dec_units
+        self.batch_sz = batch_sz #64
+        self.dec_units = dec_units #1024
         self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
         self.gru = tf.keras.layers.GRU(self.dec_units,
                                        return_sequences=True,
@@ -204,18 +204,20 @@ class Decoder(tf.keras.Model):
         self.fc = tf.keras.layers.Dense(vocab_size)
 
     def __call__(self, x, enc_output):
-        x = self.embedding(x)
-        output, state_h  = self.gru(x,enc_output )
-        x = self.fc(output)
+        x = self.embedding(x) #64, 20, 256 (batch , max length of sentence ,embedding_dim  )
+        output, state_h  = self.gru(x,enc_output )  #output = 64, 20, 1024 # state_h (last state) = 64, 1024
+        x = self.fc(output) # 64, 1, 4483
         return x, state_h
 
-
+'''init decoder'''
 decoder = Decoder(vocab_tar_size, embedding_dim, units, BATCH_SIZE)
 
+
+'''
 sample_decoder_output, _  = decoder(tf.random.uniform((BATCH_SIZE, 1)),
                                     sample_hidden)
-
 print('Decoder output shape: (batch_size, vocab size) {}'.format(sample_decoder_output.shape))
+'''
 
 optimizer = tf.keras.optimizers.Adam()
 loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
@@ -239,19 +241,34 @@ checkpoint = tf.train.Checkpoint(optimizer=optimizer,
                                  decoder=decoder)
 
 
+
+'''
+    the main magic is happening here 
+'''
+
 @tf.function
 def train_step(inp, targ, enc_hidden):
     loss = 0
 
     with tf.GradientTape() as tape:
+        '''
+            here we getting encoder output ((64, 20, 1024) , (64, 1024)).
+            by doing this enc_output[1:] we get last state(64,1024).
+        '''
         enc_output = encoder(inp, enc_hidden)
 
         dec_hidden = enc_output[1:]
 
         dec_input = tf.expand_dims([targ_lang.word_index['<start>']] * BATCH_SIZE, 1)
 
-        # Teacher forcing - feeding the target as the next input
-        for t in range(1, targ.shape[1]):
+        ''' 
+            Teacher forcing - feeding the target as the next input
+            i.e. first we passing encoder last state to decoder initial_state 
+                 and as input to the first time stamp we are passing <start> tag from every batch.
+                 out of first time stamp is 64, 1, 4483.this will go under argmax and find loss with next word of sentence(label).
+                 after that on next time stamp first word is input and second word is label.
+        '''
+        for t in range(1, targ.shape[1]): #12
             # passing enc_output to the decoder
             predictions  = decoder(dec_input, dec_hidden)
             dec_hidden = predictions[1:]
@@ -271,6 +288,7 @@ def train_step(inp, targ, enc_hidden):
     return batch_loss
 
 
+
 ''' 
 #lead check point
 a = tf.train.latest_checkpoint(
@@ -280,12 +298,15 @@ a
 checkpoint.restore(a)
 '''
 
+
 EPOCHS = 10
 
 for epoch in range(EPOCHS):
     start = time.time()
 
+    '''on starting of every epoch iteration ecoder initial state is always zero '''
     enc_hidden = encoder.init_hidden_state()
+
     total_loss = 0
 
     for (batch, (inp, targ)) in enumerate(dataset.take(steps_per_epoch)):
@@ -306,7 +327,9 @@ for epoch in range(EPOCHS):
     print('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
 
 
-
+'''this is same as train but we know we dont need back propagation in evaluate.
+   but we are checking. if we reached at <end> tag?
+'''
 def evaluate(sentence):
     sentence = preproc_sentence(sentence)
 
