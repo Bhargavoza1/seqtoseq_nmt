@@ -3,7 +3,16 @@ inp_lang = fra
 targ_lang = eng
 '''
 
-import re
+"""## Download and prepare the dataset
+
+we'll use the French-English dataset. 
+
+1. Add a *start* and *end* token to each sentence.
+2. Clean the sentences by removing special characters.
+3. Create a word index and reverse word index (dictionaries mapping from word → id and id → word).
+4. Pad each sentence to a maximum length.
+"""
+
 from shutil import copy2
 from sklearn.model_selection import train_test_split
 

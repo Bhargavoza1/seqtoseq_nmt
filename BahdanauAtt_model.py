@@ -1,3 +1,7 @@
+'''similar as basic seq2seq model.but as go through code structure it will explain how it done '''
+'''if you understand main.py? than move to model section'''
+
+
 import re
 from shutil import copy2
 from sklearn.model_selection import train_test_split
@@ -177,21 +181,22 @@ class BahdanauAttention(tf.keras.layers.Layer):
     # query_with_time_axis shape == (batch_size, 1, hidden size)
     # values shape == (batch_size, max_len, hidden size)
     # we are doing this to broadcast addition along the time axis to calculate the score
-    query_with_time_axis = tf.expand_dims(query, 1)
-    print(query_with_time_axis.shape)
+    # values = (64, 20, 1024)
+    # query = (64, 1024)
+    query_with_time_axis = tf.expand_dims(query, 1) # (64, 1, 1024)
     # score shape == (batch_size, max_length, 1)
     # we get 1 at the last axis because we are applying score to self.V
     # the shape of the tensor before applying self.V is (batch_size, max_length, units)
     score = self.V(tf.nn.tanh(
-        self.W1(query_with_time_axis) + self.W2(values)))
+        self.W1(query_with_time_axis) + self.W2(values)))#(64, 20, 1)
+
 
     # attention_weights shape == (batch_size, max_length, 1)
     attention_weights = tf.nn.softmax(score, axis=1)
 
     # context_vector shape after sum == (batch_size, hidden_size)
-    context_vector = attention_weights * values
-    context_vector = tf.reduce_sum(context_vector, axis=1)
-
+    context_vector = attention_weights * values #(64, 20, 1024)
+    context_vector = tf.reduce_sum(context_vector, axis=1)#(64, 1024)
     return context_vector, attention_weights
 
 
@@ -217,22 +222,24 @@ class Decoder(tf.keras.Model):
 
     def call(self, x, hidden, enc_output):
         # enc_output shape == (batch_size, max_length, hidden_size)
-        context_vector, attention_weights = self.attention(hidden, enc_output)
-
+        #x(64, 1)
+        #hidden(64, 1024)
+        #enc_output(64, 20, 1024)
+        context_vector, attention_weights = self.attention(hidden, enc_output) # context_vector = 64, 1024, attention_weights = 64, 20, 1
         # x shape after passing through embedding == (batch_size, 1, embedding_dim)
-        x = self.embedding(x)
+        x = self.embedding(x) #64,1,256
 
         # x shape after concatenation == (batch_size, 1, embedding_dim + hidden_size)
-        x = tf.concat([tf.expand_dims(context_vector, 1), x], axis=-1)
+        x = tf.concat([tf.expand_dims(context_vector, 1), x], axis=-1) # (64, 1, 1280)
+
 
         # passing the concatenated vector to the GRU
-        output, state = self.gru(x)
-
+        output, state = self.gru(x) #output=64, 1, 1024, state=64, 1024
         # output shape == (batch_size * 1, hidden_size)
-        output = tf.reshape(output, (-1, output.shape[2]))
+        output = tf.reshape(output, (-1, output.shape[2])) # (64, 1024)
 
         # output shape == (batch_size, vocab)
-        x = self.fc(output)
+        x = self.fc(output)#(64, 4483)
 
         return x, state, attention_weights
 
